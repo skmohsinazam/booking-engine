@@ -7,7 +7,7 @@ from .models import Booking, Service
 from .forms import BookingForm
 
 
-# Helper function: Check if the user is logged in AND marked as staff
+
 def is_staff_user(user):
     return user.is_authenticated and user.is_staff
 

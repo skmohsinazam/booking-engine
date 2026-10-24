@@ -27,7 +27,7 @@ class BookingForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Only show active services to customers
+      
         self.fields['service'].queryset = Service.objects.filter(is_active=True)
 
     def clean_booking_date(self):

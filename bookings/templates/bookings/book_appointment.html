@@ -1,0 +1,162 @@
+{% extends 'bookings/base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white py-3 border-0">
+                <h4 class="fw-bold mb-1">Book an Appointment</h4>
+                <p class="text-muted small mb-0">Select your preferred service, date, and available time slot.</p>
+            </div>
+            <div class="card-body p-4">
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger py-2">
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <form method="POST" id="bookingForm">
+                    {% csrf_token %}
+
+                    <h6 class="text-uppercase text-muted fw-bold small mb-3">1. Select Service</h6>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Service *</label>
+                        {{ form.service }}
+                    </div>
+
+                    <h6 class="text-uppercase text-muted fw-bold small mt-4 mb-3">2. Schedule Slot</h6>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Date *</label>
+                            {{ form.booking_date }}
+                            {% if form.booking_date.errors %}
+                                <div class="text-danger small mt-1">{{ form.booking_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Hidden native input bound to the clicked slot pill -->
+                        <div class="col-md-6 d-none">
+                            {{ form.start_time }}
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="form-label small fw-semibold d-block">Available Time Slots *</label>
+                        <div id="slot-container" class="d-flex flex-wrap gap-2 pt-1">
+                            <span class="text-muted small fst-italic">Please choose a date above to display available times.</span>
+                        </div>
+                        <div id="slot-error" class="text-danger small mt-1 d-none">Please select a time slot.</div>
+                    </div>
+
+                    <h6 class="text-uppercase text-muted fw-bold small mt-4 mb-3">3. Customer Details</h6>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Full Name *</label>
+                            {{ form.customer_name }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mobile Number *</label>
+                            {{ form.customer_phone }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Email Address (Optional)</label>
+                            {{ form.customer_email }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Notes / Purpose of Visit</label>
+                            {{ form.notes }}
+                        </div>
+                    </div>
+
+                    <div class="d-grid mt-4">
+                        <button type="submit" id="submitBtn" class="btn btn-primary py-2 fw-semibold">
+                            Confirm Appointment
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const dateInput = document.getElementById('id_booking_date');
+    const timeInput = document.getElementById('id_start_time');
+    const slotContainer = document.getElementById('slot-container');
+    const form = document.getElementById('bookingForm');
+    const slotError = document.getElementById('slot-error');
+
+    // Default slots: 09:00 AM to 06:00 PM at 30-minute intervals
+    const workingSlots = [
+        "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+        "12:00", "12:30", "14:00", "14:30", "15:00", "15:30",
+        "16:00", "16:30", "17:00", "17:30"
+    ];
+
+    function formatTimeLabel(timeStr) {
+        let [hours, minutes] = timeStr.split(':');
+        hours = parseInt(hours, 10);
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+        return `${hours}:${minutes} ${ampm}`;
+    }
+
+    function renderSlots(bookedSlots) {
+        slotContainer.innerHTML = '';
+        timeInput.value = '';
+
+        workingSlots.forEach(slot => {
+            const isBooked = bookedSlots.includes(slot);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = isBooked
+                ? 'btn btn-sm btn-outline-secondary opacity-50 text-decoration-line-through'
+                : 'btn btn-sm btn-outline-primary slot-pill';
+            btn.textContent = formatTimeLabel(slot);
+            btn.disabled = isBooked;
+
+            if (!isBooked) {
+                btn.addEventListener('click', function () {
+                    document.querySelectorAll('.slot-pill').forEach(b => {
+                        b.classList.remove('btn-primary', 'text-white');
+                        b.classList.add('btn-outline-primary');
+                    });
+                    btn.classList.remove('btn-outline-primary');
+                    btn.classList.add('btn-primary', 'text-white');
+                    timeInput.value = slot;
+                    slotError.classList.add('d-none');
+                });
+            }
+            slotContainer.appendChild(btn);
+        });
+    }
+
+    dateInput.addEventListener('change', function () {
+        if (!this.value) return;
+        slotContainer.innerHTML = '<span class="spinner-border spinner-border-sm text-primary"></span> Checking slot availability...';
+
+        fetch(`/api/booked-slots/?date=${this.value}`)
+            .then(res => res.json())
+            .then(data => renderSlots(data.booked_slots || []))
+            .catch(() => {
+                slotContainer.innerHTML = '<span class="text-danger small">Error loading slots. Try selecting the date again.</span>';
+            });
+    });
+
+    form.addEventListener('submit', function (e) {
+        if (!timeInput.value) {
+            e.preventDefault();
+            slotError.classList.remove('d-none');
+        }
+    });
+
+    // Auto-fetch if date is already filled (e.g., form reload)
+    if (dateInput.value) {
+        dateInput.dispatchEvent(new Event('change'));
+    }
+});
+</script>
+{% endblock %}
